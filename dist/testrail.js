@@ -59,7 +59,6 @@ var TestRail = /** @class */ (function () {
     };
     TestRail.prototype.createRun = function (name, description) {
         return __awaiter(this, void 0, void 0, function () {
-            var _this = this;
             var _a;
             return __generator(this, function (_b) {
                 switch (_b.label) {
@@ -71,8 +70,7 @@ var TestRail = /** @class */ (function () {
                     case 1:
                         _a.caseIds = _b.sent();
                         _b.label = 2;
-                    case 2:
-                        axios({
+                    case 2: return [2 /*return*/, axios({
                             method: 'post',
                             url: this.base + "/add_run/" + this.options.projectId,
                             headers: { 'Content-Type': 'application/json' },
@@ -87,26 +85,21 @@ var TestRail = /** @class */ (function () {
                                 include_all: this.includeAll,
                                 case_ids: this.caseIds
                             }),
-                        })
-                            .then(function (response) {
-                            _this.runId = response.data.id;
-                        })
-                            .catch(function (error) { return console.error(error); });
-                        return [2 /*return*/];
+                        })];
                 }
             });
         });
     };
     TestRail.prototype.deleteRun = function () {
-        axios({
+        return axios({
             method: 'post',
             url: this.base + "/delete_run/" + this.runId,
             headers: { 'Content-Type': 'application/json' },
             auth: {
                 username: this.options.username,
                 password: this.options.password,
-            },
-        }).catch(function (error) { return console.error(error); });
+            }
+        });
     };
     TestRail.prototype.publishResults = function (results) {
         var _this = this;
@@ -126,18 +119,16 @@ var TestRail = /** @class */ (function () {
         })
             .catch(function (error) { return console.error(error); });
     };
-    TestRail.prototype.closeRun = function () {
-        axios({
+    TestRail.prototype.closeRun = function (runId) {
+        return axios({
             method: 'post',
-            url: this.base + "/close_run/" + this.runId,
+            url: this.base + "/close_run/" + runId,
             headers: { 'Content-Type': 'application/json' },
             auth: {
                 username: this.options.username,
                 password: this.options.password,
             },
-        })
-            .then(function () { return console.log('- Test run closed successfully'); })
-            .catch(function (error) { return console.error(error); });
+        });
     };
     return TestRail;
 }());

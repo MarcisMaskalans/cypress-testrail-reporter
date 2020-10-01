@@ -1,85 +1,111 @@
-import { reporters } from 'mocha';
+import {reporters} from 'mocha';
 import * as moment from 'moment';
-import { TestRail } from './testrail';
-import { titleToCaseIds } from './shared';
-import { Status, TestRailResult } from './testrail.interface';
+import {Status, TestRailResult} from './testrail.interface';
+import {TestRail} from "./testrail";
+
 const chalk = require('chalk');
+const TestRailPromise = require("testrail-promise");
 
 export class CypressTestRailReporter extends reporters.Spec {
-  private results: TestRailResult[] = [];
-  private testRail: TestRail;
+    private results: TestRailResult[] = [];
+    private testRail: TestRail;
+    private testRailProm;
 
-  constructor(runner: any, options: any) {
-    super(runner);
+    constructor(runner: any, options: any) {
+        super(runner);
 
-    let reporterOptions = options.reporterOptions;
-    this.testRail = new TestRail(reporterOptions);
-    this.validate(reporterOptions, 'domain');
-    this.validate(reporterOptions, 'username');
-    this.validate(reporterOptions, 'password');
-    this.validate(reporterOptions, 'projectId');
-    this.validate(reporterOptions, 'suiteId');
+        let reporterOptions = options.reporterOptions;
+        let runIdNew = null;
+        this.testRail = new TestRail(reporterOptions);
+        this.validate(reporterOptions, 'domain');
+        this.validate(reporterOptions, 'username');
+        this.validate(reporterOptions, 'password');
+        this.validate(reporterOptions, 'projectId');
+        this.validate(reporterOptions, 'suiteId');
+        this.testRailProm = new TestRailPromise(`https://${reporterOptions.domain}`, reporterOptions.username, reporterOptions.password);
 
-    runner.on('start', () => {
-      const executionDateTime = moment().format('MMM Do YYYY, HH:mm (Z)');
-      const name = `${reporterOptions.runName || 'Automated test run'} ${executionDateTime}`;
-      const description = 'For the Cypress run visit https://dashboard.cypress.io/#/projects/runs';
-      this.testRail.createRun(name, description);
-    });
+        let pushToTestRail = (data, status: Status, commentMessage: string) => {
+            if (reporterOptions.pushResultsToTestRail) {
+                let sectionId = null;
+                let addSectionObj = {
+                    project_id: reporterOptions.projectId,
+                    suite_id: reporterOptions.suiteId,
+                    section_name: data.parent.title.trim(),
+                    name: data.parent.title.trim(),
+                    description: ''
+                };
 
-    runner.on('pass', test => {
-      const caseIds = titleToCaseIds(test.title);
-      if (caseIds.length > 0) {
-        const results = caseIds.map(caseId => {
-          return {
-            case_id: caseId,
-            status_id: Status.Passed,
-            comment: `Execution time: ${test.duration}ms`,
-          };
+                this.testRailProm.getSectionIdByName(addSectionObj).then((res) => {
+                    if (res !== null) {
+                        sectionId = res;
+                    } else {
+                        this.testRailProm.addSection(addSectionObj)
+                            .then((newRes) => {
+                                sectionId = newRes;
+                            })
+                    }
+                    let addCaseObj = {
+                        title: data.title.trim(),
+                        project_id: reporterOptions.projectId,
+                        suite_id: reporterOptions.suiteId,
+                        section_id: sectionId,
+                        refs: 'Cypress automation',
+                        custom_automation_id: 'Cypress',
+                        custom_automated: 1,
+                        custom_test_team: 1,
+                        custom_deprecated: 1,
+                        custom_end_to_end: 1,
+                        custom_integration_test: 1,
+                    };
+                    this.testRailProm.ifNeededAddThenGetCaseId(addCaseObj).then((caseId) => {
+                        let newNewRequest = {
+                            run_id: runIdNew.id,
+                            case_id: caseId,
+                            status_id: status,
+                            comment: commentMessage,
+                        };
+                        this.testRailProm.addResultForCase(newNewRequest);
+                    });
+                })
+            }
+        };
+
+        runner.on('start', () => {
+            if (reporterOptions.pushResultsToTestRail) {
+                const executionDateTime = moment().format('MMM Do YYYY, HH:mm (Z)');
+                const name = `${reporterOptions.runName || 'Automated test run'} ${executionDateTime}`;
+                const description = 'Cypress auto publish from https://github.com/MarcisMaskalans/cypress-testrail-reporter';
+                this.testRail.createRun(name, description).then((runIdData) => {
+                    runIdNew = runIdData.data; // THIS MAKES NEW RUN AND RETURNS RUN_ID
+                });
+            }
         });
-        this.results.push(...results);
-      }
-    });
 
-    runner.on('fail', test => {
-      const caseIds = titleToCaseIds(test.title);
-      if (caseIds.length > 0) {
-        const results = caseIds.map(caseId => {
-          return {
-            case_id: caseId,
-            status_id: Status.Failed,
-            comment: `${test.err.message}`,
-          };
+        runner.on('pass', test => {
+            pushToTestRail(test, Status.Passed, `Execution time: ${test.duration}ms`);
         });
-        this.results.push(...results);
-      }
-    });
 
-    runner.on('end', () => {
-      if (this.results.length == 0) {
-        console.log('\n', chalk.magenta.underline.bold('(TestRail Reporter)'));
-        console.warn(
-          '\n',
-          'No testcases were matched. Ensure that your tests are declared correctly and matches Cxxx',
-          '\n'
-        );
-        this.testRail.deleteRun();
+        runner.on('fail', test => {
+            pushToTestRail(test, Status.Failed, `${test.err.message}`);
+        });
 
-        return;
-      }
+        runner.on('pending', test => {
+            pushToTestRail(test, Status.Retest, `This test has .skip status, might be it needs refactoring`);
+        });
 
-      // publish test cases results & close the run
-      this.testRail.publishResults(this.results)
-        .then(() => this.testRail.closeRun());
-    });
-  }
-
-  private validate(options, name: string) {
-    if (options == null) {
-      throw new Error('Missing reporterOptions in cypress.json');
+        runner.on('end', () => {
+            if (reporterOptions.closeTestRun) {
+                this.testRail.closeRun(runIdNew.id);
+            }
+        });
     }
-    if (options[name] == null) {
-      throw new Error(`Missing ${name} value. Please update reporterOptions in cypress.json`);
+
+    private validate(options, name: string) {
+        if (options == null) {
+            throw new Error('Missing reporterOptions in cypress.json');
+        }
+        if (options[name] == null) {
+            throw new Error(`Missing ${name} value. Please update reporterOptions in cypress.json`);
+        }
     }
-  }
 }
