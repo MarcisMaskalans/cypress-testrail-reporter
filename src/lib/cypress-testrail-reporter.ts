@@ -24,7 +24,7 @@ export class CypressTestRailReporter extends reporters.Spec {
         this.validate(reporterOptions, 'suiteId');
         this.testRailProm = new TestRailPromise(`https://${reporterOptions.domain}`, reporterOptions.username, reporterOptions.password);
 
-        let pushingFunction = (data, status: Status, commentMessage: string) => {
+        let pushToTestRail = (data, status: Status, commentMessage: string) => {
             if (reporterOptions.pushResultsToTestRail) {
                 let sectionId = null;
                 let addSectionObj = {
@@ -82,15 +82,15 @@ export class CypressTestRailReporter extends reporters.Spec {
         });
 
         runner.on('pass', test => {
-            pushingFunction(test, Status.Passed, `Execution time: ${test.duration}ms`);
+            pushToTestRail(test, Status.Passed, `Execution time: ${test.duration}ms`);
         });
 
         runner.on('fail', test => {
-            pushingFunction(test, Status.Failed, `${test.err.message}`);
+            pushToTestRail(test, Status.Failed, `${test.err.message}`);
         });
 
         runner.on('pending', test => {
-            pushingFunction(test, Status.Retest, `This test has .skip status, might be it needs refactoring`);
+            pushToTestRail(test, Status.Retest, `This test has .skip status, might be it needs refactoring`);
         });
 
         runner.on('end', () => {
