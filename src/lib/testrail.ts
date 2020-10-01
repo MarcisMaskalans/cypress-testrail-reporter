@@ -30,8 +30,8 @@ export class TestRail {
     if (this.options.includeAllInTestRun === false){
       this.includeAll = false;
       this.caseIds =  await this.getCases();
-    }  
-    axios({
+    }
+    return axios({
       method: 'post',
       url: `${this.base}/add_run/${this.options.projectId}`,
       headers: { 'Content-Type': 'application/json' },
@@ -47,22 +47,18 @@ export class TestRail {
         case_ids: this.caseIds
       }),
     })
-      .then(response => {
-        this.runId = response.data.id;
-      })
-      .catch(error => console.error(error));
   }
 
   public deleteRun() {
-    axios({
+    return axios({
       method: 'post',
       url: `${this.base}/delete_run/${this.runId}`,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {'Content-Type': 'application/json'},
       auth: {
         username: this.options.username,
         password: this.options.password,
-      },
-    }).catch(error => console.error(error));
+      }
+    });
   }
 
   public publishResults(results: TestRailResult[]) {
@@ -89,17 +85,15 @@ export class TestRail {
       .catch(error => console.error(error));
   }
 
-  public closeRun() {
-    axios({
+  public closeRun(runId) {
+    return axios({
       method: 'post',
-      url: `${this.base}/close_run/${this.runId}`,
+      url: `${this.base}/close_run/${runId}`,
       headers: { 'Content-Type': 'application/json' },
       auth: {
         username: this.options.username,
         password: this.options.password,
       },
     })
-      .then(() => console.log('- Test run closed successfully'))
-      .catch(error => console.error(error));
   }
 }

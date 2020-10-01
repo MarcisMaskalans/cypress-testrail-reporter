@@ -12,66 +12,92 @@ var __extends = (this && this.__extends) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 var mocha_1 = require("mocha");
 var moment = require("moment");
-var testrail_1 = require("./testrail");
-var shared_1 = require("./shared");
 var testrail_interface_1 = require("./testrail.interface");
+var testrail_1 = require("./testrail");
 var chalk = require('chalk');
+var TestRailPromise = require("testrail-promise");
 var CypressTestRailReporter = /** @class */ (function (_super) {
     __extends(CypressTestRailReporter, _super);
     function CypressTestRailReporter(runner, options) {
         var _this = _super.call(this, runner) || this;
         _this.results = [];
         var reporterOptions = options.reporterOptions;
+        var runIdNew = null;
         _this.testRail = new testrail_1.TestRail(reporterOptions);
         _this.validate(reporterOptions, 'domain');
         _this.validate(reporterOptions, 'username');
         _this.validate(reporterOptions, 'password');
         _this.validate(reporterOptions, 'projectId');
         _this.validate(reporterOptions, 'suiteId');
+        _this.testRailProm = new TestRailPromise("https://" + reporterOptions.domain, reporterOptions.username, reporterOptions.password);
+        var pushingFunction = function (data, status, commentMessage) {
+            if (reporterOptions.pushResultsToTestRail) {
+                var sectionId_1 = null;
+                var addSectionObj_1 = {
+                    project_id: reporterOptions.projectId,
+                    suite_id: reporterOptions.suiteId,
+                    section_name: data.parent.title.trim(),
+                    name: data.parent.title.trim(),
+                    description: ''
+                };
+                _this.testRailProm.getSectionIdByName(addSectionObj_1).then(function (res) {
+                    if (res !== null) {
+                        sectionId_1 = res;
+                    }
+                    else {
+                        _this.testRailProm.addSection(addSectionObj_1)
+                            .then(function (newRes) {
+                            sectionId_1 = newRes;
+                        });
+                    }
+                    var addCaseObj = {
+                        title: data.title.trim(),
+                        project_id: reporterOptions.projectId,
+                        suite_id: reporterOptions.suiteId,
+                        section_id: sectionId_1,
+                        refs: 'Cypress automation',
+                        custom_automation_id: 'AUTO',
+                        custom_automated: 1,
+                        custom_test_team: 1,
+                        custom_deprecated: 1,
+                        custom_end_to_end: 1,
+                        custom_integration_test: 1,
+                    };
+                    _this.testRailProm.ifNeededAddThenGetCaseId(addCaseObj).then(function (caseId) {
+                        var newNewRequest = {
+                            run_id: runIdNew.id,
+                            case_id: caseId,
+                            status_id: status,
+                            comment: commentMessage,
+                        };
+                        _this.testRailProm.addResultForCase(newNewRequest);
+                    });
+                });
+            }
+        };
         runner.on('start', function () {
-            var executionDateTime = moment().format('MMM Do YYYY, HH:mm (Z)');
-            var name = (reporterOptions.runName || 'Automated test run') + " " + executionDateTime;
-            var description = 'For the Cypress run visit https://dashboard.cypress.io/#/projects/runs';
-            _this.testRail.createRun(name, description);
+            if (reporterOptions.pushResultsToTestRail) {
+                var executionDateTime = moment().format('MMM Do YYYY, HH:mm (Z)');
+                var name_1 = (reporterOptions.runName || 'Automated test run') + " " + executionDateTime;
+                var description = 'Cypress AutoPush';
+                _this.testRail.createRun(name_1, description).then(function (runIdData) {
+                    runIdNew = runIdData.data; // THIS MAKES NEW RUN AND RETURNS RUN_ID
+                });
+            }
         });
         runner.on('pass', function (test) {
-            var caseIds = shared_1.titleToCaseIds(test.title);
-            if (caseIds.length > 0) {
-                var results = caseIds.map(function (caseId) {
-                    return {
-                        case_id: caseId,
-                        status_id: testrail_interface_1.Status.Passed,
-                        comment: "Execution time: " + test.duration + "ms",
-                    };
-                });
-                (_a = _this.results).push.apply(_a, results);
-            }
-            var _a;
+            pushingFunction(test, testrail_interface_1.Status.Passed, "Execution time: " + test.duration + "ms");
         });
         runner.on('fail', function (test) {
-            var caseIds = shared_1.titleToCaseIds(test.title);
-            if (caseIds.length > 0) {
-                var results = caseIds.map(function (caseId) {
-                    return {
-                        case_id: caseId,
-                        status_id: testrail_interface_1.Status.Failed,
-                        comment: "" + test.err.message,
-                    };
-                });
-                (_a = _this.results).push.apply(_a, results);
-            }
-            var _a;
+            pushingFunction(test, testrail_interface_1.Status.Failed, "" + test.err.message);
+        });
+        runner.on('pending', function (test) {
+            pushingFunction(test, testrail_interface_1.Status.Retest, "This test has .skip status, might be it needs refactoring");
         });
         runner.on('end', function () {
-            if (_this.results.length == 0) {
-                console.log('\n', chalk.magenta.underline.bold('(TestRail Reporter)'));
-                console.warn('\n', 'No testcases were matched. Ensure that your tests are declared correctly and matches Cxxx', '\n');
-                _this.testRail.deleteRun();
-                return;
+            if (reporterOptions.closeTestRun) {
+                _this.testRail.closeRun(runIdNew.id);
             }
-            // publish test cases results & close the run
-            _this.testRail.publishResults(_this.results)
-                .then(function () { return _this.testRail.closeRun(); });
         });
         return _this;
     }

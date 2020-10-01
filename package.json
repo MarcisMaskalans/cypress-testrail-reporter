@@ -32,7 +32,8 @@
     "btoa": "^1.1.2",
     "chalk": "^2.4.1",
     "mocha": "^2.2.5",
-    "moment": "^2.22.1"
+    "moment": "^2.22.1",
+    "testrail-promise": "^0.1.19"
   },
   "devDependencies": {
     "@types/chai": "^3.4.34",
