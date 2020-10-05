@@ -12,6 +12,7 @@ export class CypressTestRailReporter extends reporters.Spec {
     private testRailProm;
 
     constructor(runner: any, options: any) {
+
         super(runner);
 
         let reporterOptions = options.reporterOptions;
@@ -59,7 +60,7 @@ export class CypressTestRailReporter extends reporters.Spec {
                     };
                     this.testRailProm.ifNeededAddThenGetCaseId(addCaseObj).then((caseId) => {
                         let newNewRequest = {
-                            run_id: runIdNew.id,
+                            run_id: reporterOptions.runId,
                             case_id: caseId,
                             status_id: status,
                             comment: commentMessage,
@@ -72,12 +73,14 @@ export class CypressTestRailReporter extends reporters.Spec {
 
         runner.on('start', () => {
             if (reporterOptions.pushResultsToTestRail) {
-                const executionDateTime = moment().format('MMM Do YYYY, HH:mm (Z)');
-                const name = `${reporterOptions.runName || 'Automated test run'} ${executionDateTime}`;
-                const description = 'Cypress auto publish from https://github.com/MarcisMaskalans/cypress-testrail-reporter';
-                this.testRail.createRun(name, description).then((runIdData) => {
-                    runIdNew = runIdData.data; // THIS MAKES NEW RUN AND RETURNS RUN_ID
-                });
+                if(reporterOptions.runId === null) {
+                    const executionDateTime = moment().format('MMM Do YYYY, HH:mm (Z)');
+                    const name = `${reporterOptions.runName || 'Automated test run'} ${executionDateTime}`;
+                    const description = 'Cypress auto publish from https://github.com/MarcisMaskalans/cypress-testrail-reporter';
+                    this.testRail.createRun(name, description).then((runIdData) => {
+                        reporterOptions.runId = runIdData.data.id; // THIS MAKES NEW RUN AND RETURNS RUN_ID
+                    });
+                }
             }
         });
 
@@ -95,7 +98,7 @@ export class CypressTestRailReporter extends reporters.Spec {
 
         runner.on('end', () => {
             if (reporterOptions.closeTestRun) {
-                this.testRail.closeRun(runIdNew.id);
+                this.testRail.closeRun(reporterOptions.runId);
             }
         });
     }
