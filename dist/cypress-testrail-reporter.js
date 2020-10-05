@@ -30,7 +30,7 @@ var CypressTestRailReporter = /** @class */ (function (_super) {
         _this.validate(reporterOptions, 'projectId');
         _this.validate(reporterOptions, 'suiteId');
         _this.testRailProm = new TestRailPromise("https://" + reporterOptions.domain, reporterOptions.username, reporterOptions.password);
-        var pushingFunction = function (data, status, commentMessage) {
+        var pushToTestRail = function (data, status, commentMessage) {
             if (reporterOptions.pushResultsToTestRail) {
                 var sectionId_1 = null;
                 var addSectionObj_1 = {
@@ -56,7 +56,7 @@ var CypressTestRailReporter = /** @class */ (function (_super) {
                         suite_id: reporterOptions.suiteId,
                         section_id: sectionId_1,
                         refs: 'Cypress automation',
-                        custom_automation_id: 'AUTO',
+                        custom_automation_id: 'Cypress',
                         custom_automated: 1,
                         custom_test_team: 1,
                         custom_deprecated: 1,
@@ -65,7 +65,7 @@ var CypressTestRailReporter = /** @class */ (function (_super) {
                     };
                     _this.testRailProm.ifNeededAddThenGetCaseId(addCaseObj).then(function (caseId) {
                         var newNewRequest = {
-                            run_id: runIdNew.id,
+                            run_id: reporterOptions.runId,
                             case_id: caseId,
                             status_id: status,
                             comment: commentMessage,
@@ -77,26 +77,28 @@ var CypressTestRailReporter = /** @class */ (function (_super) {
         };
         runner.on('start', function () {
             if (reporterOptions.pushResultsToTestRail) {
-                var executionDateTime = moment().format('MMM Do YYYY, HH:mm (Z)');
-                var name_1 = (reporterOptions.runName || 'Automated test run') + " " + executionDateTime;
-                var description = 'Cypress AutoPush';
-                _this.testRail.createRun(name_1, description).then(function (runIdData) {
-                    runIdNew = runIdData.data; // THIS MAKES NEW RUN AND RETURNS RUN_ID
-                });
+                if (reporterOptions.runId === null) {
+                    var executionDateTime = moment().format('MMM Do YYYY, HH:mm (Z)');
+                    var name_1 = (reporterOptions.runName || 'Automated test run') + " " + executionDateTime;
+                    var description = 'Cypress auto publish from https://github.com/MarcisMaskalans/cypress-testrail-reporter';
+                    _this.testRail.createRun(name_1, description).then(function (runIdData) {
+                        reporterOptions.runId = runIdData.data.id; // THIS MAKES NEW RUN AND RETURNS RUN_ID
+                    });
+                }
             }
         });
         runner.on('pass', function (test) {
-            pushingFunction(test, testrail_interface_1.Status.Passed, "Execution time: " + test.duration + "ms");
+            pushToTestRail(test, testrail_interface_1.Status.Passed, "Execution time: " + test.duration + "ms");
         });
         runner.on('fail', function (test) {
-            pushingFunction(test, testrail_interface_1.Status.Failed, "" + test.err.message);
+            pushToTestRail(test, testrail_interface_1.Status.Failed, "" + test.err.message);
         });
         runner.on('pending', function (test) {
-            pushingFunction(test, testrail_interface_1.Status.Retest, "This test has .skip status, might be it needs refactoring");
+            pushToTestRail(test, testrail_interface_1.Status.Retest, "This test has .skip status, might be it needs refactoring");
         });
         runner.on('end', function () {
             if (reporterOptions.closeTestRun) {
-                _this.testRail.closeRun(runIdNew.id);
+                _this.testRail.closeRun(reporterOptions.runId);
             }
         });
         return _this;
